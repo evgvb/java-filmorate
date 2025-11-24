@@ -21,7 +21,7 @@ public class FilmController {
     private final Map<Long, Film> films = new HashMap<>();
 
     // день рождения кино
-    final LocalDate MIN_RELEASE_DATE = LocalDate.of(1895, 12, 28);
+    private static final LocalDate MIN_RELEASE_DATE = LocalDate.of(1895, 12, 28);
 
     private long getNextId() {
         long currentMaxId = films.keySet()
