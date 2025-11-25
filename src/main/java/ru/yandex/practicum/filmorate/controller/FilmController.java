@@ -66,7 +66,7 @@ public class FilmController {
         if (film.getName() != null && !film.getName().isBlank()) {
             updatedFilm.setName(film.getName());
         }
-        if (film.getDescription() != null) {
+        if (film.getDescription() != null && !film.getDescription().isBlank() && updatedFilm.getDescription().length() < 201) {
             updatedFilm.setDescription(film.getDescription());
         }
         if (film.getReleaseDate() != null) {

@@ -31,17 +31,24 @@ public class UserController {
 
     @GetMapping
     public ResponseEntity<Collection<User>> getUsers() {
+        log.info("Запрошен список пользователей, возвращено {} пользователей", users.size());
         return ResponseEntity.ok(users.values());
     }
 
     @PostMapping
     public ResponseEntity<User> create(@Valid @RequestBody User user) {
+        boolean loginExists = users.values().stream()
+                .anyMatch(existingUser -> existingUser.getLogin().equals(user.getLogin()));
+        if (loginExists) {
+            log.info("Этот login уже используется другим пользователем id: {}", user.getId());
+            throw new ConditionsNotMetException("Этот login уже используется другим пользователем login: " + user.getLogin());
+        }
+
         boolean emailExists = users.values().stream()
                 .anyMatch(existingUser -> existingUser.getEmail().equals(user.getEmail()));
         if (emailExists) {
-            log.info("Этот email уже используется id: {}", user.getId() + " email: " + user.getEmail());
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(null);
+            log.info("Этот email уже используется другим пользователем id: {}", user.getId());
+            throw new ConditionsNotMetException("Этот email уже используется другим пользователем email: " + user.getEmail());
         }
 
         user.setId(getNextId());
@@ -51,14 +58,27 @@ public class UserController {
     }
 
     @PutMapping
-    public ResponseEntity<?> update(@Valid @RequestBody User user) {
+    public ResponseEntity<?> update(@RequestBody User user) {
         if (user.getId() == null || !users.containsKey(user.getId())) {
             log.warn("Пользователь не найден id: {}", user.getId());
             throw new NotFoundException("Пользователь не найден id: " + user.getId());
         }
 
+        boolean loginExists = users.values().stream()
+                .anyMatch(existingUser ->
+                        !existingUser.getId().equals(user.getId()) &&
+                                existingUser.getLogin().equals(user.getLogin())
+                );
+        if (loginExists) {
+            log.warn("Этот login уже используется другим пользователем id: {}", user.getLogin());
+            throw new ConditionsNotMetException("Этот login уже используется другим пользователем: " + user.getLogin());
+        }
+
         boolean emailExists = users.values().stream()
-                .anyMatch(existingUser -> existingUser.getEmail().equals(user.getEmail()));
+                .anyMatch(existingUser ->
+                        !existingUser.getId().equals(user.getId()) &&
+                                existingUser.getEmail().equals(user.getEmail())
+                );
         if (emailExists) {
             log.warn("Этот email уже используется другим пользователем: {}", user.getEmail());
             throw new ConditionsNotMetException("Этот email уже используется другим пользователем: " + user.getEmail());
@@ -67,16 +87,24 @@ public class UserController {
         User updatedUser = users.get(user.getId());
 
         // Обновляем все поля
-        if (user.getEmail() != null) {
+        if (user.getEmail() != null && !user.getEmail().isBlank() &&
+                user.getEmail().matches("^(?=.{1,64}@)[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*(\\.[A-Za-z]{2,})$")) {
             updatedUser.setEmail(user.getEmail());
         }
-        if (user.getLogin() != null && !user.getLogin().isBlank()) {
+        boolean isUpdateLogin = false;
+        //а может не надо менять name
+        //boolean isLoginEqName = updatedUser.getLogin().equals(updatedUser.getName());
+        if (user.getLogin() != null && !user.getLogin().isBlank() && !user.getLogin().contains(" ")) {
             updatedUser.setLogin(user.getLogin());
+            isUpdateLogin = true;
         }
         if (user.getName() != null && !user.getName().isBlank()) {
             updatedUser.setName(user.getName());
-        } else {
-            // Если имя не указано, используем логин
+        } else if (isUpdateLogin) {
+            // Если имя не указано и login поменялся, используем логин.
+            // ??? а если updatedUser.name был не пустой, то может и не надо его менять...
+            // как вариант: менять если он был равен старому login...
+            //} else if (isUpdateLogin && isLoginEqName) {
             updatedUser.setName(user.getLogin());
         }
         if (user.getBirthday() != null && !user.getBirthday().isAfter(LocalDate.now())) {
