@@ -5,8 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import ru.yandex.practicum.filmorate.exception.ConditionsNotMetException;
+import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.User;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,25 +54,14 @@ public class UserController {
     public ResponseEntity<?> update(@Valid @RequestBody User user) {
         if (user.getId() == null || !users.containsKey(user.getId())) {
             log.warn("Пользователь не найден id: {}", user.getId());
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Not found");
-            errorResponse.put("message", "Пользователь не найден id: " + user.getId());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+            throw new NotFoundException("Пользователь не найден id: " + user.getId());
         }
-
-        //Проверяем, что email не используется другим пользователем
-//        boolean emailExists = users.values().stream()
-//                .anyMatch(existingUser -> existingUser.getEmail().equals(user.getEmail()) &&
-//                        !existingUser.getId().equals(user.getId()));
 
         boolean emailExists = users.values().stream()
                 .anyMatch(existingUser -> existingUser.getEmail().equals(user.getEmail()));
         if (emailExists) {
             log.warn("Этот email уже используется другим пользователем: {}", user.getEmail());
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Validation error");
-            errorResponse.put("message", "Этот email уже используется другим пользователем: " + user.getEmail());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+            throw new ConditionsNotMetException("Этот email уже используется другим пользователем: " + user.getEmail());
         }
 
         User updatedUser = users.get(user.getId());
@@ -78,16 +70,16 @@ public class UserController {
         if (user.getEmail() != null) {
             updatedUser.setEmail(user.getEmail());
         }
-        if (user.getLogin() != null) {
+        if (user.getLogin() != null && !user.getLogin().isBlank()) {
             updatedUser.setLogin(user.getLogin());
         }
-        if (user.getName() != null) {
+        if (user.getName() != null && !user.getName().isBlank()) {
             updatedUser.setName(user.getName());
         } else {
             // Если имя не указано, используем логин
             updatedUser.setName(user.getLogin());
         }
-        if (user.getBirthday() != null) {
+        if (user.getBirthday() != null && !user.getBirthday().isAfter(LocalDate.now())) {
             updatedUser.setBirthday(user.getBirthday());
         }
 

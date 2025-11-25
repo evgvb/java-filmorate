@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.yandex.practicum.filmorate.exception.ConditionsNotMetException;
+import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.Film;
 
 import java.time.LocalDate;
@@ -41,6 +42,7 @@ public class FilmController {
 
     @GetMapping
     public ResponseEntity<Collection<Film>> getFilms() {
+        log.info("Запрошен список фильмов, возвращено {} фильмов", films.size());
         return ResponseEntity.ok(films.values());
     }
 
@@ -54,25 +56,21 @@ public class FilmController {
     }
 
     @PutMapping
-    public ResponseEntity<Film> updateFilm(@Valid @RequestBody Film film) {
-        if (film.getId() == null || !films.containsKey(film.getId())) {
+    public ResponseEntity<Film> updateFilm(@RequestBody Film film) {
+        if (film.getId() == null && !films.containsKey(film.getId())) {
             log.warn("Фильм не найден. id: {}", film.getId());
-            Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Not found");
-            errorResponse.put("message", "Фильм не найден id: " + film.getId());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body((Film) errorResponse);
+            throw new NotFoundException("Фильм не найден id: " + film.getId());
         }
 
-        validateFilm(film);
-
         Film updatedFilm = films.get(film.getId());
-        if (film.getName() != null) {
+        if (film.getName() != null || !film.getName().isBlank()) {
             updatedFilm.setName(film.getName());
         }
         if (film.getDescription() != null) {
             updatedFilm.setDescription(film.getDescription());
         }
         if (film.getReleaseDate() != null) {
+            validateFilm(film);
             updatedFilm.setReleaseDate(film.getReleaseDate());
         }
         if (film.getDuration() != null) {
