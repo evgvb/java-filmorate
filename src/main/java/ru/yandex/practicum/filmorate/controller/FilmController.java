@@ -57,13 +57,13 @@ public class FilmController {
 
     @PutMapping
     public ResponseEntity<Film> updateFilm(@RequestBody Film film) {
-        if (film.getId() == null && !films.containsKey(film.getId())) {
+        if (film.getId() == null || !films.containsKey(film.getId())) {
             log.warn("Фильм не найден. id: {}", film.getId());
             throw new NotFoundException("Фильм не найден id: " + film.getId());
         }
 
         Film updatedFilm = films.get(film.getId());
-        if (film.getName() != null || !film.getName().isBlank()) {
+        if (film.getName() != null && !film.getName().isBlank()) {
             updatedFilm.setName(film.getName());
         }
         if (film.getDescription() != null) {
@@ -73,7 +73,7 @@ public class FilmController {
             validateFilm(film);
             updatedFilm.setReleaseDate(film.getReleaseDate());
         }
-        if (film.getDuration() != null) {
+        if (film.getDuration() != null && film.getDuration() > 0) {
             updatedFilm.setDuration(film.getDuration());
         }
         log.info("Фильм обновлен: {}", updatedFilm);
