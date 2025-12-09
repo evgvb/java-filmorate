@@ -8,6 +8,7 @@ import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.storage.FilmStorage;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 
@@ -15,6 +16,7 @@ import java.util.List;
 public class FilmService {
     private final FilmStorage filmStorage;
     private final UserStorage userStorage;
+    private static final LocalDate MIN_RELEASE_DATE = LocalDate.of(1895, 12, 28);
 
     @Autowired
     public FilmService(FilmStorage filmStorage, UserStorage userStorage) {
@@ -23,11 +25,14 @@ public class FilmService {
     }
 
     public void addLike(Long filmId, Long userId) {
-        Film film = filmStorage.getFilmById(filmId);
-        userStorage.getUserById(userId);
+        Film film = filmStorage.getFilmById(filmId)
+                .orElseThrow(() -> new NotFoundException("Фильм с id=" + filmId + " не найден"));
+
+        userStorage.getUserById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
 
         if (film.getLikes().contains(userId)) {
-            throw new ConditionsNotMetException("Пользователь уже поставил лайк этому фильму");
+            throw new ConditionsNotMetException("Пользователь с id=" + filmId + " уже поставил лайк фильму с id=" + filmId);
         }
 
         film.addLike(userId);
@@ -35,11 +40,14 @@ public class FilmService {
     }
 
     public void removeLike(Long filmId, Long userId) {
-        Film film = filmStorage.getFilmById(filmId);
-        userStorage.getUserById(userId);
+        Film film = filmStorage.getFilmById(filmId)
+                .orElseThrow(() -> new NotFoundException("Фильм с id=" + filmId + " не найден"));
+
+        userStorage.getUserById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
 
         if (!film.getLikes().contains(userId)) {
-            throw new ConditionsNotMetException("Пользователь не ставил лайк этому фильму");
+            throw new ConditionsNotMetException("Пользователь  с id=" + filmId + "не ставил лайк фильму с id=" + filmId);
         }
 
         film.removeLike(userId);
@@ -59,22 +67,31 @@ public class FilmService {
     }
 
     public Film getFilmById(Long id) {
-        return filmStorage.getFilmById(id);
+        return filmStorage.getFilmById(id)
+                .orElseThrow(() -> new NotFoundException("Фильм с id=" + id + " не найден"));
     }
 
     public Film createFilm(Film film) {
+        validateFilm(film);
         return filmStorage.createFilm(film);
     }
 
     public Film updateFilm(Film film) {
-        if (!filmStorage.containsFilm(film.getId())) {
-            throw new NotFoundException("Фильм с id=" + film.getId() + " не найден");
-        }
+        return filmStorage.getFilmById(film.getId())
+                .map(existingFilm -> {
+                    validateFilm(film);
 
-        return filmStorage.updateFilm(film);
+                    if (existingFilm.getLikes() != null) {
+                        film.setLikes(existingFilm.getLikes());
+                    }
+                    return filmStorage.updateFilm(film);
+                })
+                .orElseThrow(() -> new NotFoundException("Фильм с id=" + film.getId() + " не найден"));
     }
 
-    public boolean containsFilm(Long id) {
-        return filmStorage.containsFilm(id);
+    private void validateFilm(Film film) {
+        if (film.getReleaseDate().isBefore(MIN_RELEASE_DATE)) {
+            throw new ConditionsNotMetException("дата релиза — не раньше 28 декабря 1895 года");
+        }
     }
 }

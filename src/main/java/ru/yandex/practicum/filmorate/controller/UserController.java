@@ -6,8 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.filmorate.exception.ConditionsNotMetException;
-import ru.yandex.practicum.filmorate.exception.NotFoundException;
+
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.service.UserService;
 
@@ -66,16 +65,6 @@ public class UserController {
 
     @PutMapping
     public ResponseEntity<User> update(@Valid @RequestBody User user) {
-        User existingUser = userService.getUserById(user.getId());
-
-        if (existingUser.getFriends() != null) {
-            user.setFriends(existingUser.getFriends());
-        }
-
-        if (user.getName() == null || user.getName().isBlank()) {
-            user.setName(user.getLogin());
-        }
-
         User updatedUser = userService.updateUser(user);
         log.info("Пользователь обновлен: {}", updatedUser);
         return ResponseEntity.ok(updatedUser);
@@ -87,7 +76,6 @@ public class UserController {
             @PathVariable Long friendId) {
 
         userService.addFriend(id, friendId);
-        log.info("Пользователь {} добавил в друзья пользователя {}", id, friendId);
         return ResponseEntity.ok().build();
     }
 
@@ -96,30 +84,7 @@ public class UserController {
             @PathVariable Long id,
             @PathVariable Long friendId) {
 
-        if (id == null || id <= 0) {
-            throw new ConditionsNotMetException("ID пользователя должен быть положительным числом");
-        }
-
-        if (friendId == null || friendId <= 0) {
-            throw new ConditionsNotMetException("ID друга должен быть положительным числом");
-        }
-
-        if (!userService.containsUser(id)) {
-            throw new NotFoundException("Пользователь с id=" + id + " не найден");
-        }
-
-        if (!userService.containsUser(friendId)) {
-            throw new NotFoundException("Пользователь с id=" + friendId + " не найден");
-        }
-
         userService.removeFriend(id, friendId);
-
-        User user = userService.getUserById(id);
-        if (user.getFriends().contains(friendId)) {
-            log.info("Пользователь {} удалил из друзей пользователя {}", id, friendId);
-        } else {
-            log.info("Пользователи {} и {} не были друзьями, операция удаления пропущена", id, friendId);
-        }
 
         return ResponseEntity.ok().build();
     }

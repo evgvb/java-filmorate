@@ -27,14 +27,15 @@ public class UserService {
         validateUserId(userId);
         validateUserId(friendId);
 
-        User user = userStorage.getUserById(userId);
-        User friend = userStorage.getUserById(friendId);
+        User user = userStorage.getUserById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+        User friend = userStorage.getUserById(friendId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + friendId + " не найден"));
 
-        if (userId.equals(friendId)) {
-            throw new ConditionsNotMetException("Нельзя добавить себя в друзья");
-        }
+        verificationFriend(userId, friendId);
 
         if (user.getFriends().contains(friendId)) {
+            log.debug("Пользователи id={} и id={} уже являются друзья", userId, friendId);
             return;
         }
 
@@ -51,8 +52,10 @@ public class UserService {
         validateUserId(userId);
         validateUserId(friendId);
 
-        User user = userStorage.getUserById(userId);
-        User friend = userStorage.getUserById(friendId);
+        User user = userStorage.getUserById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+        User friend = userStorage.getUserById(friendId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + friendId + " не найден"));
 
         if (!user.getFriends().contains(friendId)) {
             return;
@@ -74,11 +77,13 @@ public class UserService {
     }
 
     public List<User> getFriends(Long userId) {
-        User user = userStorage.getUserById(userId);
+        User user = userStorage.getUserById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
         List<User> friends = new ArrayList<>();
 
         for (Long friendId : user.getFriends()) {
-            User friend = userStorage.getUserById(friendId);
+            User friend = userStorage.getUserById(friendId)
+                    .orElseThrow(() -> new NotFoundException("Друг с id=" + friendId + " не найден"));
             friends.add(friend);
         }
         return friends;
@@ -86,12 +91,12 @@ public class UserService {
 
     public List<User> getCommonFriends(Long userId1, Long userId2) {
 
-        if (userId1.equals(userId2)) {
-            throw new ConditionsNotMetException("Сам себе друг - не положено");
-        }
+        verificationFriend(userId1, userId2);
 
-        User user1 = userStorage.getUserById(userId1);
-        User user2 = userStorage.getUserById(userId2);
+        User user1 = userStorage.getUserById(userId1)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId1 + " не найден"));
+        User user2 =  userStorage.getUserById(userId2)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId2 + " не найден"));
 
         Set<Long> friends1 = user1.getFriends();
         Set<Long> friends2 = user2.getFriends();
@@ -99,7 +104,8 @@ public class UserService {
         List<User> commonFriends = new ArrayList<>();
         for (Long friendId : friends1) {
             if (friends2.contains(friendId)) {
-                User friend = userStorage.getUserById(friendId);
+                User friend = userStorage.getUserById(friendId)
+                        .orElseThrow(() -> new NotFoundException("Друг с id=" + friendId + " не найден"));
                 commonFriends.add(friend);
             }
         }
@@ -111,18 +117,13 @@ public class UserService {
     }
 
     public User getUserById(Long id) {
-        return userStorage.getUserById(id);
+
+        return userStorage.getUserById(id)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + id + " не найден"));
     }
 
     public User createUser(User user) {
-
-        if (userStorage.isEmailExists(user.getEmail())) {
-            throw new ConditionsNotMetException("Email уже используется");
-        }
-
-        if (userStorage.isLoginExists(user.getLogin())) {
-            throw new ConditionsNotMetException("Login уже используется");
-        }
+        verificationLoginMail(user);
 
         if (user.getName() == null || user.getName().isBlank()) {
             user.setName(user.getLogin());
@@ -133,9 +134,18 @@ public class UserService {
 
     public User updateUser(User user) {
 
-        if (!userStorage.containsUser(user.getId())) {
-            throw new NotFoundException("Пользователь с id=" + user.getId() + " не найден");
+        User existingUser = userStorage.getUserById(user.getId())
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + user.getId() + " не найден"));
+
+        if (existingUser.getFriends() != null) {
+            user.setFriends(existingUser.getFriends());
         }
+
+        if (user.getName() == null || user.getName().isBlank()) {
+            user.setName(user.getLogin());
+        }
+
+        verificationLoginMail(user);
 
         if (user.getName() == null || user.getName().isBlank()) {
             user.setName(user.getLogin());
@@ -143,24 +153,53 @@ public class UserService {
 
         return userStorage.updateUser(user);
     }
+//
+//    public boolean isEmailExists(String email) {
+//        return userStorage.isEmailExists(email);
+//    }
+//
+//    public boolean isLoginExists(String login) {
+//        return userStorage.isLoginExists(login);
+//    }
+//
+//    public boolean isEmailExists(String email, Long excludeUserId) {
+//        return userStorage.isEmailExists(email, excludeUserId);
+//    }
+//
+//    public boolean isLoginExists(String login, Long excludeUserId) {
+//        return userStorage.isLoginExists(login, excludeUserId);
+//    }
+//
+//    public void deleteUser(Long id) {
+//        if (id == null || id <= 0) {
+//            throw new ConditionsNotMetException("ID пользователя должен быть положительным числом");
+//        }
+//
+//        if (!userStorage.containsUser(id)) {
+//            throw new NotFoundException("Пользователь с id=" + id + " не найден");
+//        }
+//
+//        userStorage.deleteUser(id);
+//        log.info("Удален пользователь с id: {}", id);
+//    }
+//
+//    public boolean containsUser(Long id) {
+//        return userStorage.containsUser(id);
+//    }
 
-    public boolean isEmailExists(String email) {
-        return userStorage.isEmailExists(email);
+    private void verificationLoginMail(User user) {
+        if (userStorage.isEmailExists(user.getEmail())) {
+            throw new ConditionsNotMetException("Email уже используется");
+        }
+
+        if (userStorage.isLoginExists(user.getLogin())) {
+            throw new ConditionsNotMetException("Login уже используется");
+        }
     }
 
-    public boolean isLoginExists(String login) {
-        return userStorage.isLoginExists(login);
-    }
-
-    public boolean isEmailExists(String email, Long excludeUserId) {
-        return userStorage.isEmailExists(email, excludeUserId);
-    }
-
-    public boolean isLoginExists(String login, Long excludeUserId) {
-        return userStorage.isLoginExists(login, excludeUserId);
-    }
-
-    public boolean containsUser(Long id) {
-        return userStorage.containsUser(id);
+    private void verificationFriend(Long userId1, Long userId2) {
+        if (userId1.equals(userId2)) {
+            throw new ConditionsNotMetException("Сам себе друг - не положено");
+        }
     }
 }
