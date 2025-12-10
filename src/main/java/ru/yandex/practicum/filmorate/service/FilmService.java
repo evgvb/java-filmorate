@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionsNotMetException;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.FilmStorage;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
@@ -26,7 +27,7 @@ public class FilmService {
 
     public void addLike(Long filmId, Long userId) {
         Film film = getFilmOrThrow(filmId);
-        UserService.getUserOrThrow(userId);
+        getUserOrThrow(userId);
 
         if (film.getLikes().contains(userId)) {
             throw new ConditionsNotMetException("Пользователь с id=" + filmId + " уже поставил лайк фильму с id=" + filmId);
@@ -38,7 +39,7 @@ public class FilmService {
 
     public void removeLike(Long filmId, Long userId) {
         Film film = getFilmOrThrow(filmId);
-        UserService.getUserOrThrow(userId);
+        getUserOrThrow(userId);
 
         if (!film.getLikes().contains(userId)) {
             throw new ConditionsNotMetException("Пользователь  с id=" + userId + "не ставил лайк фильму с id=" + filmId);
@@ -91,5 +92,10 @@ public class FilmService {
     private Film getFilmOrThrow(Long filmId) {
         return filmStorage.getFilmById(filmId)
                 .orElseThrow(() -> new NotFoundException("Фильм с id=" + filmId + " не найден"));
+    }
+
+    private User getUserOrThrow(Long userId) {
+        return userStorage.getUserById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
     }
 }

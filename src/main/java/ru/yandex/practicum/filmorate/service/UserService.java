@@ -16,7 +16,7 @@ import java.util.Set;
 @Service
 @Slf4j
 public class UserService {
-    private static UserStorage userStorage = null;
+    private final UserStorage userStorage;
 
     @Autowired
     public UserService(UserStorage userStorage) {
@@ -161,7 +161,7 @@ public class UserService {
         }
     }
 
-    static User getUserOrThrow(Long userId) {
+    private User getUserOrThrow(Long userId) {
         return userStorage.getUserById(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
     }
