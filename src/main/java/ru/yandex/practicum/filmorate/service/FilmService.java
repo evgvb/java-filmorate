@@ -25,11 +25,8 @@ public class FilmService {
     }
 
     public void addLike(Long filmId, Long userId) {
-        Film film = filmStorage.getFilmById(filmId)
-                .orElseThrow(() -> new NotFoundException("Фильм с id=" + filmId + " не найден"));
-
-        userStorage.getUserById(userId)
-                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+        Film film = getFilmOrThrow(filmId);
+        UserService.getUserOrThrow(userId);
 
         if (film.getLikes().contains(userId)) {
             throw new ConditionsNotMetException("Пользователь с id=" + filmId + " уже поставил лайк фильму с id=" + filmId);
@@ -40,14 +37,11 @@ public class FilmService {
     }
 
     public void removeLike(Long filmId, Long userId) {
-        Film film = filmStorage.getFilmById(filmId)
-                .orElseThrow(() -> new NotFoundException("Фильм с id=" + filmId + " не найден"));
-
-        userStorage.getUserById(userId)
-                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+        Film film = getFilmOrThrow(filmId);
+        UserService.getUserOrThrow(userId);
 
         if (!film.getLikes().contains(userId)) {
-            throw new ConditionsNotMetException("Пользователь  с id=" + filmId + "не ставил лайк фильму с id=" + filmId);
+            throw new ConditionsNotMetException("Пользователь  с id=" + userId + "не ставил лайк фильму с id=" + filmId);
         }
 
         film.removeLike(userId);
@@ -67,8 +61,7 @@ public class FilmService {
     }
 
     public Film getFilmById(Long id) {
-        return filmStorage.getFilmById(id)
-                .orElseThrow(() -> new NotFoundException("Фильм с id=" + id + " не найден"));
+        return getFilmOrThrow(id);
     }
 
     public Film createFilm(Film film) {
@@ -93,5 +86,10 @@ public class FilmService {
         if (film.getReleaseDate().isBefore(MIN_RELEASE_DATE)) {
             throw new ConditionsNotMetException("дата релиза — не раньше 28 декабря 1895 года");
         }
+    }
+
+    private Film getFilmOrThrow(Long filmId) {
+        return filmStorage.getFilmById(filmId)
+                .orElseThrow(() -> new NotFoundException("Фильм с id=" + filmId + " не найден"));
     }
 }
