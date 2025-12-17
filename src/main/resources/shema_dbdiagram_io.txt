@@ -1,0 +1,73 @@
+// Use DBML to define your database structure
+// Docs: https://dbml.dbdiagram.io/docs
+
+
+Table users {
+  id integer [primary key]
+  name varchar(255) [not null]
+  login varchar(255) [unique, not null]
+  email varchar(255) [unique, not null]
+  birthday date [not null]
+}
+
+Table frands {
+  user_id integer [ref: > users.id]
+  frend_id integer [ref: > users.id]
+  status boolean
+
+  indexes {
+    (user_id, frend_id) [pk]
+  }
+}
+
+
+Table films {
+  id integer [primary key]
+  name varchar(255) [not null]
+  description varchar(255) 
+  releaseDate date [not null]
+  duration integer [not null]
+  rateMPA_id integer [ref: > rateМРА.id]
+
+}
+
+Table likes {
+  film_id integer [ref: > films.id]
+  user_id integer [ref: > users.id]
+
+  indexes {
+    (film_id, user_id) [pk]
+  }
+}
+
+
+Table rateМРА {
+  id integer [primary key]
+  name varchar(255) [unique, not null]
+  description varchar(255)
+ }
+
+Table filmGanre {
+  film_id integer [ref: > films.id]
+  ganre_id integer [ref: > ganre.id]
+
+  indexes {
+    (film_id, ganre_id) [unique]
+  }
+}
+
+Table ganre {
+  id integer [primary key]
+  name varchar(255)
+}
+
+// или перечисление
+//enum genre {
+//  COMEDY
+//  DRAMA
+//  ANIMATION
+//  THRILLER
+//  DOCUMENTARY
+//  ACTION
+//}
+
