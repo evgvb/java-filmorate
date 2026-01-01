@@ -2,6 +2,7 @@ package ru.yandex.practicum.filmorate.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionsNotMetException;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
@@ -19,7 +20,7 @@ public class UserService {
     private final UserStorage userStorage;
 
     @Autowired
-    public UserService(UserStorage userStorage) {
+    public UserService(@Qualifier("userDbStorage") UserStorage userStorage) {
         this.userStorage = userStorage;
     }
 
@@ -37,13 +38,16 @@ public class UserService {
             return;
         }
 
-        user.addFriend(friendId);
-        friend.addFriend(userId);
+        // проверка, user добавлен в друзья freiend
+        boolean hasReciprocalRequest = friend.getFriends().contains(userId);
+        User.FriendshipStatus status = hasReciprocalRequest ?
+                User.FriendshipStatus.CONFIRMED : User.FriendshipStatus.UNCONFIRMED;
 
+        user.addFriend(friendId, status);
         userStorage.updateUser(user);
-        userStorage.updateUser(friend);
 
-        log.debug("Пользователь id={} добавил в друзья пользователя id={}", userId, friendId);
+        log.debug("Пользователь id={} добавил в друзья пользователя id={} (статус: {})",
+                userId, friendId, status);
     }
 
     public void removeFriend(Long userId, Long friendId) {
@@ -61,10 +65,14 @@ public class UserService {
         }
 
         user.removeFriend(friendId);
-        friend.removeFriend(userId);
+
+        // если дружба была подтвержденной, у друга меняем статус на UNCONFIRMED
+        if (friend.getFriends().contains(userId)) {
+            friend.addFriend(userId, User.FriendshipStatus.UNCONFIRMED);
+            userStorage.updateUser(friend);
+        }
 
         userStorage.updateUser(user);
-        userStorage.updateUser(friend);
 
         log.debug("Пользователь id={} удалил из друзей пользователя id={}", userId, friendId);
     }
@@ -125,7 +133,6 @@ public class UserService {
     }
 
     public User updateUser(User user) {
-
         User existingUser = getUserOrThrow(user.getId());
 
         if (existingUser.getFriends() != null) {

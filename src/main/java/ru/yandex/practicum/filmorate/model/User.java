@@ -5,12 +5,16 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Data
+@EqualsAndHashCode(of = "id")
 public class User {
     private Long id;
 
@@ -30,6 +34,15 @@ public class User {
     private LocalDate birthday;
 
     private Set<Long> friends = new HashSet<>();
+    private Map<Long, FriendshipStatus> friendshipStatuses = new HashMap<>();
+
+    public Map<Long, FriendshipStatus> getFriendshipStatuses() {
+        return new HashMap<>(friendshipStatuses);
+    }
+
+    public enum FriendshipStatus {
+        UNCONFIRMED, CONFIRMED
+    }
 
     public String getName() {
         if (name == null || name.isBlank()) {
@@ -42,12 +55,14 @@ public class User {
         this.name = name;
     }
 
-    public void addFriend(Long friendId) {
+    public void addFriend(Long friendId, FriendshipStatus status) {
         friends.add(friendId);
+        friendshipStatuses.put(friendId, status);
     }
 
     public void removeFriend(Long friendId) {
         friends.remove(friendId);
+        friendshipStatuses.remove(friendId);
     }
 
     public Set<Long> getFriends() {

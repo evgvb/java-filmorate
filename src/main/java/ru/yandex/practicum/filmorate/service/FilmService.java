@@ -1,28 +1,38 @@
 package ru.yandex.practicum.filmorate.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionsNotMetException;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.FilmStorage;
+import ru.yandex.practicum.filmorate.storage.GenreStorage;
+import ru.yandex.practicum.filmorate.storage.MpaStorage;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
 import java.time.LocalDate;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 @Service
 public class FilmService {
     private final FilmStorage filmStorage;
     private final UserStorage userStorage;
+    private final MpaStorage mpaStorage;
+    private final GenreStorage genreStorage;
     private static final LocalDate MIN_RELEASE_DATE = LocalDate.of(1895, 12, 28);
 
     @Autowired
-    public FilmService(FilmStorage filmStorage, UserStorage userStorage) {
+    public FilmService(@Qualifier("filmDbStorage") FilmStorage filmStorage,
+                       @Qualifier("userDbStorage") UserStorage userStorage,
+                       MpaStorage mpaStorage,
+                       GenreStorage genreStorage) {
         this.filmStorage = filmStorage;
         this.userStorage = userStorage;
+        this.mpaStorage = mpaStorage;
+        this.genreStorage = genreStorage;
     }
 
     public void addLike(Long filmId, Long userId) {
@@ -67,6 +77,17 @@ public class FilmService {
 
     public Film createFilm(Film film) {
         validateFilm(film);
+
+        // Проверяем существование рейтинга MPA
+        if (film.getMpa() != null && film.getMpa().getId() != null) {
+            validateMpaExists(film.getMpa().getId());
+        }
+
+        // Проверяем существование жанра
+        if (film.getGenres() != null && !film.getGenres().isEmpty()) {
+            validateAllGenresExist(film.getGenres());
+        }
+
         return filmStorage.createFilm(film);
     }
 
@@ -78,6 +99,15 @@ public class FilmService {
                     if (existingFilm.getLikes() != null) {
                         film.setLikes(existingFilm.getLikes());
                     }
+
+                    if (film.getMpa() != null && film.getMpa().getId() != null) {
+                        validateMpaExists(film.getMpa().getId());
+                    }
+
+                    if (film.getGenres() != null && !film.getGenres().isEmpty()) {
+                        validateAllGenresExist(film.getGenres());
+                    }
+
                     return filmStorage.updateFilm(film);
                 })
                 .orElseThrow(() -> new NotFoundException("Фильм с id=" + film.getId() + " не найден"));
@@ -97,5 +127,28 @@ public class FilmService {
     private User getUserOrThrow(Long userId) {
         return userStorage.getUserById(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+    }
+
+    private void validateMpaExists(Integer mpaId) {
+        if (mpaId != null) {
+            mpaStorage.getMpaById(mpaId)
+                    .orElseThrow(() -> new NotFoundException("Рейтинг MPA с id=" + mpaId + " не найден"));
+        }
+    }
+
+    private void validateAllGenresExist(Set<Genre> genres) {
+        Set<Integer> invalidGenreIds = new HashSet<>();
+
+        for (Genre genre : genres) {
+            Optional<Genre> existingGenre = genreStorage.getGenreById(genre.getId());
+            if (existingGenre.isEmpty()) {
+            //if (existingGenre == null) {
+                invalidGenreIds.add(genre.getId());
+            }
+        }
+
+        if (!invalidGenreIds.isEmpty()) {
+            throw new NotFoundException("Жанры с id=" + invalidGenreIds + " не найдены");
+        }
     }
 }
