@@ -8,10 +8,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
 
 @Data
 @EqualsAndHashCode(of = "id")
@@ -33,13 +29,6 @@ public class User {
     @PastOrPresent(message = "дата рождения не может быть в будущем")
     private LocalDate birthday;
 
-    private Set<Long> friends = new HashSet<>();
-    private Map<Long, FriendshipStatus> friendshipStatuses = new HashMap<>();
-
-    public Map<Long, FriendshipStatus> getFriendshipStatuses() {
-        return new HashMap<>(friendshipStatuses);
-    }
-
     public enum FriendshipStatus {
         UNCONFIRMED, CONFIRMED
     }
@@ -53,23 +42,5 @@ public class User {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public void addFriend(Long friendId, FriendshipStatus status) {
-        friends.add(friendId);
-        friendshipStatuses.put(friendId, status);
-    }
-
-    public void removeFriend(Long friendId) {
-        friends.remove(friendId);
-        friendshipStatuses.remove(friendId);
-    }
-
-    public Set<Long> getFriends() {
-        return new HashSet<>(friends);
-    }
-
-    public void setFriends(Set<Long> friends) {
-        this.friends = friends != null ? new HashSet<>(friends) : new HashSet<>();
     }
 }

@@ -133,30 +133,51 @@ class FilmorateApplicationTests {
         User user5 = userDbStorage.createUser(testUser5);
 
         // Добавляем друзей
-        user4.addFriend(user5.getId(), User.FriendshipStatus.CONFIRMED);
-        user5.addFriend(user4.getId(), User.FriendshipStatus.CONFIRMED);
-
-        // Обновляем пользователей
-        userDbStorage.updateUser(user4);
-        userDbStorage.updateUser(user5);
+        userDbStorage.addFriend(user4.getId(), user5.getId(), User.FriendshipStatus.CONFIRMED);
+        userDbStorage.addFriend(user5.getId(), user4.getId(), User.FriendshipStatus.CONFIRMED);
 
         // Проверяем друзей у user4
-        Optional<User> foundUser4 = userDbStorage.getUserById(user4.getId());
-        assertThat(foundUser4)
-                .isPresent()
-                .hasValueSatisfying(user -> {
-                    assertThat(user.getFriends()).contains(user5.getId());
-                    assertThat(user.getFriendshipStatuses().get(user5.getId()))
-                            .isEqualTo(User.FriendshipStatus.CONFIRMED);
-                });
+        List<Long> user4Friends = userDbStorage.getFriends(user4.getId());
+        assertThat(user4Friends)
+                .isNotEmpty()
+                .contains(user5.getId());
+
+        // Проверяем статус дружбы
+        User.FriendshipStatus status = userDbStorage.getFriendshipStatus(user4.getId(), user5.getId());
+        assertThat(status).isEqualTo(User.FriendshipStatus.CONFIRMED);
+
+        // Проверяем наличие друга
+        boolean hasFriend = userDbStorage.hasFriend(user4.getId(), user5.getId());
+        assertThat(hasFriend).isTrue();
 
         // Проверяем друзей у user5
-        Optional<User> foundUser5 = userDbStorage.getUserById(user5.getId());
-        assertThat(foundUser5)
-                .isPresent()
-                .hasValueSatisfying(user -> {
-                    assertThat(user.getFriends()).contains(user4.getId());
-                });
+        List<Long> user5Friends = userDbStorage.getFriends(user5.getId());
+        assertThat(user5Friends)
+                .isNotEmpty()
+                .contains(user4.getId());
+
+        // Проверяем статус дружбы
+        User.FriendshipStatus reverseStatus = userDbStorage.getFriendshipStatus(user5.getId(), user4.getId());
+        assertThat(reverseStatus).isEqualTo(User.FriendshipStatus.CONFIRMED);
+
+        // Удаляем друга
+        userDbStorage.removeFriend(user4.getId(), user5.getId());
+
+        // Проверяем, что друг удален
+        List<Long> user4FriendsAfterRemove = userDbStorage.getFriends(user4.getId());
+        assertThat(user4FriendsAfterRemove).isEmpty();
+
+        boolean hasFriendAfterRemoval = userDbStorage.hasFriend(user4.getId(), user5.getId());
+        assertThat(hasFriendAfterRemoval).isFalse();
+
+        // У user5 друг должен быть со статусом UNCONFIRMED)
+        List<Long> user5FriendsAfterRemoval = userDbStorage.getFriends(user5.getId());
+        assertThat(user5FriendsAfterRemoval).contains(user4.getId());
+
+        User.FriendshipStatus statusAfterRemoval = userDbStorage.getFriendshipStatus(user5.getId(), user4.getId());
+        assertThat(statusAfterRemoval).isEqualTo(User.FriendshipStatus.UNCONFIRMED);
+
+
     }
 
     @Test
@@ -243,14 +264,16 @@ class FilmorateApplicationTests {
         Optional<Film> filmOptional = filmDbStorage.getFilmById(3L);
 
         assertThat(filmOptional)
-                .as("Фильм с ID=2 должен существовать")
+                .as("Фильм с ID=3 должен существовать")
                 .isPresent();
 
         Film film = filmOptional.get();
 
-        film.addLike(user.getId());
+        // Сохраняем начальное количество лайков
+        int initialLikesCount = film.getLikesCount();
 
-        Film updatedFilm = filmDbStorage.updateFilm(film);
+        // Добавляем лайк через storage
+        filmDbStorage.addLike(film.getId(), user.getId());
 
         Optional<Film> foundFilm = filmDbStorage.getFilmById(film.getId());
 
@@ -262,12 +285,43 @@ class FilmorateApplicationTests {
                             .as("Список лайков должен содержать ID пользователя")
                             .contains(user.getId());
 
-                    int expectedLikesCount = 1;
+                    int expectedLikesCount =initialLikesCount + 1;
 
                     assertThat(filmWithLike.getLikesCount())
-                            .as("Количество лайков должно быть равно 2")
+                            .as("Количество лайков должно увеличиться на 1")
                             .isEqualTo(expectedLikesCount);
                 });
+
+        // Проверяем, что лайк действительно существует
+        boolean hasLike = filmDbStorage.hasLike(film.getId(), user.getId());
+        assertThat(hasLike)
+                .as("Фильм должен иметь лайк от пользователя")
+                .isTrue();
+
+        // Тестируем удаление лайка
+        filmDbStorage.removeLike(film.getId(), user.getId());
+
+        // Получаем фильм после удаления лайка
+        Optional<Film> filmAfterRemoval = filmDbStorage.getFilmById(film.getId());
+
+        assertThat(filmAfterRemoval)
+                .as("Фильм должен быть найден после удаления лайка")
+                .isPresent()
+                .hasValueSatisfying(filmWithoutLike -> {
+                    assertThat(filmWithoutLike.getLikes())
+                            .as("Список лайков не должен содержать ID пользователя после удаления")
+                            .doesNotContain(user.getId());
+
+                    assertThat(filmWithoutLike.getLikesCount())
+                            .as("Количество лайков должно вернуться к исходному")
+                            .isEqualTo(initialLikesCount);
+                });
+
+        // Проверяем, что лайк удален
+        boolean hasLikeAfterRemoval = filmDbStorage.hasLike(film.getId(), user.getId());
+        assertThat(hasLikeAfterRemoval)
+                .as("Фильм не должен иметь лайк от пользователя после удаления")
+                .isFalse();
     }
 
     @Test

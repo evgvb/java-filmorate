@@ -8,8 +8,7 @@ import org.springframework.stereotype.Repository;
 import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.storage.GenreStorage;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Repository
 @Qualifier("genreDbStorage")
@@ -69,5 +68,50 @@ public class GenreDbStorage implements GenreStorage {
     public void deleteFilmGenres(Long filmId) {
         String sql = "DELETE FROM film_genres WHERE film_id = ?";
         jdbcTemplate.update(sql, filmId);
+    }
+
+    @Override
+    public Map<Long, List<Genre>> getGenresForFilms(List<Long> filmIds) {
+        if (filmIds == null || filmIds.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        // Collections.nCopies(n, element) - создает список из n копий элемента "?"
+        // String.join объединяет их запятыми: для 3 filmIds -> "?,?,?"
+        String inClause = String.join(",", Collections.nCopies(filmIds.size(), "?"));
+
+        // Формируем SQL-запрос с использованием форматирования строк
+        String sql = String.format(
+                "SELECT fg.film_id, g.* " +
+                        "FROM film_genres fg " +
+                        "JOIN genres g ON fg.genre_id = g.id " +
+                        "WHERE fg.film_id IN (%s) " +
+                        "ORDER BY fg.film_id, g.id",
+                inClause    // Подставляем в IN-условие:
+        );
+
+        // filmIds.toArray() передает параметры для подстановки вместо "?"
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, filmIds.toArray());
+
+        Map<Long, List<Genre>> result = new HashMap<>();
+
+        for (Map<String, Object> row : rows) {
+            Long filmId = ((Number) row.get("film_id")).longValue();
+            Genre genre = new Genre(
+                    ((Number) row.get("id")).intValue(),
+                    (String) row.get("name")
+            );
+
+            result.computeIfAbsent(filmId, k -> new ArrayList<>()).add(genre);
+        }
+
+        // Для фильмов без жанров добавляем пустые списки
+        for (Long filmId : filmIds) {
+            if (!result.containsKey(filmId)) {
+                result.put(filmId, new ArrayList<>());
+            }
+        }
+
+        return result;
     }
 }

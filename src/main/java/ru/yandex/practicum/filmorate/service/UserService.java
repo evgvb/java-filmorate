@@ -9,10 +9,9 @@ import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -28,51 +27,52 @@ public class UserService {
         validateUserId(userId);
         validateUserId(friendId);
 
-        User user = getUserOrThrow(userId);
-        User friend = getUserOrThrow(friendId);
+        getUserOrThrow(userId);
+        getUserOrThrow(friendId);
 
         verificationFriend(userId, friendId);
 
-        if (user.getFriends().contains(friendId)) {
-            log.debug("Пользователи id={} и id={} уже являются друзья", userId, friendId);
+        if (userStorage.hasFriend(userId, friendId)) {
+            log.debug("Пользователи id={} и id={} уже являются друзьями", userId, friendId);
             return;
         }
 
         // проверка, user добавлен в друзья freiend
-        boolean hasReciprocalRequest = friend.getFriends().contains(userId);
+        boolean hasReciprocalRequest = userStorage.hasFriend(friendId, userId);
         User.FriendshipStatus status = hasReciprocalRequest ?
                 User.FriendshipStatus.CONFIRMED : User.FriendshipStatus.UNCONFIRMED;
 
-        user.addFriend(friendId, status);
-        userStorage.updateUser(user);
+        userStorage.addFriend(userId, friendId, status);
+
+        if (hasReciprocalRequest) {
+            userStorage.updateFriendshipStatus(friendId, userId, User.FriendshipStatus.CONFIRMED);
+        }
 
         log.debug("Пользователь id={} добавил в друзья пользователя id={} (статус: {})",
                 userId, friendId, status);
     }
 
     public void removeFriend(Long userId, Long friendId) {
+
         validateUserId(userId);
         validateUserId(friendId);
 
-        User user = getUserOrThrow(userId);
-        User friend = getUserOrThrow(friendId);
+        getUserOrThrow(userId);
+        getUserOrThrow(friendId);
 
         verificationFriend(userId, friendId);
 
-        if (!user.getFriends().contains(friendId)) {
+        if (!userStorage.hasFriend(userId, friendId)) {
             log.debug("У пользователя id={} нет друга id={}", userId, friendId);
             return;
         }
 
-        user.removeFriend(friendId);
+        userStorage.removeFriend(userId, friendId);
 
-        // если дружба была подтвержденной, у друга меняем статус на UNCONFIRMED
-        if (friend.getFriends().contains(userId)) {
-            friend.addFriend(userId, User.FriendshipStatus.UNCONFIRMED);
-            userStorage.updateUser(friend);
+        // Если дружба была подтвержденной, у друга меняем статус на UNCONFIRMED
+        if (userStorage.hasFriend(friendId, userId)) {
+            userStorage.updateFriendshipStatus(friendId, userId, User.FriendshipStatus.UNCONFIRMED);
         }
-
-        userStorage.updateUser(user);
 
         log.debug("Пользователь id={} удалил из друзей пользователя id={}", userId, friendId);
     }
@@ -84,34 +84,25 @@ public class UserService {
     }
 
     public List<User> getFriends(Long userId) {
-        User user = getUserOrThrow(userId);
-        List<User> friends = new ArrayList<>();
-
-        for (Long friendId : user.getFriends()) {
-            User friend = getUserOrThrow(friendId);
-            friends.add(friend);
-        }
-        return friends;
+        getUserOrThrow(userId);
+        return userStorage.getFriendsList(userId);
     }
 
     public List<User> getCommonFriends(Long userId1, Long userId2) {
-
         verificationFriend(userId1, userId2);
 
-        User user1 = getUserOrThrow(userId1);
-        User user2 =  getUserOrThrow(userId2);
+        getUserOrThrow(userId1);
+        getUserOrThrow(userId2);
 
-        Set<Long> friends1 = user1.getFriends();
-        Set<Long> friends2 = user2.getFriends();
+        List<Long> friends1 = userStorage.getFriends(userId1);
+        List<Long> friends2 = userStorage.getFriends(userId2);
 
-        List<User> commonFriends = new ArrayList<>();
-        for (Long friendId : friends1) {
-            if (friends2.contains(friendId)) {
-                User friend = getUserOrThrow(friendId);
-                commonFriends.add(friend);
-            }
-        }
-        return commonFriends;
+        // Находим пересечение списков ID друзей
+        List<Long> commonFriendIds = friends1.stream()
+                .filter(friends2::contains)
+                .collect(Collectors.toList());
+
+        return userStorage.getUsersByIds(commonFriendIds);
     }
 
     public Collection<User> getAllUsers() {
@@ -135,29 +126,21 @@ public class UserService {
     public User updateUser(User user) {
         User existingUser = getUserOrThrow(user.getId());
 
-        if (existingUser.getFriends() != null) {
-            user.setFriends(existingUser.getFriends());
-        }
-
         if (user.getName() == null || user.getName().isBlank()) {
             user.setName(user.getLogin());
         }
 
         verificationLoginMail(user);
 
-        if (user.getName() == null || user.getName().isBlank()) {
-            user.setName(user.getLogin());
-        }
-
         return userStorage.updateUser(user);
     }
 
     private void verificationLoginMail(User user) {
-        if (userStorage.isEmailExists(user.getEmail())) {
+        if (userStorage.isEmailExists(user.getEmail(), user.getId())) { //if (userStorage.isEmailExists(user.getEmail())) {
             throw new ConditionsNotMetException("Email уже используется");
         }
 
-        if (userStorage.isLoginExists(user.getLogin())) {
+        if (userStorage.isLoginExists(user.getLogin(), user.getId())) { //if (userStorage.isLoginExists(user.getLogin())) {
             throw new ConditionsNotMetException("Login уже используется");
         }
     }

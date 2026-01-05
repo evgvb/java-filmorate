@@ -4,9 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.Genre;
-import ru.yandex.practicum.filmorate.storage.GenreStorage;
+import ru.yandex.practicum.filmorate.service.GenreService;
 
 import java.util.List;
 
@@ -15,29 +14,23 @@ import java.util.List;
 @Slf4j
 public class GenreController {
 
-    private final GenreStorage genreStorage;
+    private final GenreService genreService;
 
     @Autowired
-    public GenreController(GenreStorage genreStorage) {
-        this.genreStorage = genreStorage;
+    public GenreController(GenreService genreService) {
+        this.genreService = genreService;
     }
 
     @GetMapping
     public ResponseEntity<List<Genre>> getAllGenres() {
-        List<Genre> genres = genreStorage.getAllGenres();
+        List<Genre> genres = genreService.getAllGenres();
         log.info("Запрошен список всех жанров, найдено {} жанров", genres.size());
         return ResponseEntity.ok(genres);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<Genre> getGenreById(@PathVariable Integer id) {
-        if (id < 1) {
-            throw new NotFoundException("ID жанра должен быть положительным числом");
-        }
-
-        Genre genre = genreStorage.getGenreById(id)
-                .orElseThrow(() -> new NotFoundException("Жанр с id=" + id + " не найден"));
-
+        Genre genre = genreService.getGenreById(id);
         log.info("Запрошен жанр с id: {}", id);
         return ResponseEntity.ok(genre);
     }
