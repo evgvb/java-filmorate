@@ -285,7 +285,7 @@ class FilmorateApplicationTests {
                             .as("Список лайков должен содержать ID пользователя")
                             .contains(user.getId());
 
-                    int expectedLikesCount =initialLikesCount + 1;
+                    int expectedLikesCount = initialLikesCount + 1;
 
                     assertThat(filmWithLike.getLikesCount())
                             .as("Количество лайков должно увеличиться на 1")
