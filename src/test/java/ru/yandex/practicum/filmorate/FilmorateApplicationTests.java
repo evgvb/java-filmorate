@@ -1,7 +1,7 @@
 package ru.yandex.practicum.filmorate;
 
 import lombok.RequiredArgsConstructor;
-import org.junit.jupiter.api.Order;
+//import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -11,6 +11,8 @@ import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.model.Mpa;
 import ru.yandex.practicum.filmorate.model.User;
+import ru.yandex.practicum.filmorate.service.FilmService;
+import ru.yandex.practicum.filmorate.service.GenreService;
 import ru.yandex.practicum.filmorate.storage.db.FilmDbStorage;
 import ru.yandex.practicum.filmorate.storage.db.GenreDbStorage;
 import ru.yandex.practicum.filmorate.storage.db.MpaDbStorage;
@@ -32,6 +34,10 @@ class FilmorateApplicationTests {
     private final FilmDbStorage filmDbStorage;
     private final MpaDbStorage mpaDbStorage;
     private final GenreDbStorage genreDbStorage;
+    @Autowired
+    private GenreService genreService;
+    @Autowired
+    private FilmService filmService;
 
     @Test
     void contextLoads() {
@@ -206,7 +212,13 @@ class FilmorateApplicationTests {
         updatedGenres.add(new Genre(3)); // Мультфильм
         updatedFilm.setGenres(updatedGenres);
 
+        genreService.deleteFilmGenres(1L);
+        genreService.setFilmGenres(1L, new ArrayList<>(updatedGenres));
+
         filmDbStorage.updateFilm(updatedFilm);
+
+        // Загружаем жанры для проверки
+        List<Genre> filmGenres = genreService.getFilmGenres(1L);
 
         // Проверяем обновление
         Optional<Film> foundFilm = filmDbStorage.getFilmById(1L);
@@ -220,11 +232,13 @@ class FilmorateApplicationTests {
                     assertThat(film.getDuration()).isEqualTo(130);
                     assertThat(film.getMpa()).isNotNull();
                     assertThat(film.getMpa().getId()).isEqualTo(2);
-                    assertThat(film.getGenres()).hasSize(1);
-                    assertThat(film.getGenres())
-                            .extracting(Genre::getId)
-                            .containsExactly(3);
                 });
+
+        // Проверяем жанры отдельно
+        assertThat(filmGenres).hasSize(1);
+        assertThat(filmGenres)
+                .extracting(Genre::getId)
+                .containsExactly(3);
     }
 
     @Test
@@ -365,7 +379,6 @@ class FilmorateApplicationTests {
     }
 
     @Test
-    @Order(18)
     void testGetFilmGenres() {
         // Создаем фильм с жанрами
         Film testFilm1 = new Film();
@@ -380,9 +393,13 @@ class FilmorateApplicationTests {
         genres1.add(new Genre(2));
         testFilm1.setGenres(genres1);
 
+        // Создаем фильм
         Film film = filmDbStorage.createFilm(testFilm1);
 
-        // Получаем жанры фильма
+        // Сохраняем жанры
+        genreDbStorage.setFilmGenres(film.getId(), new ArrayList<>(genres1));
+
+        // Получаем жанры
         List<Genre> filmGenres = genreDbStorage.getFilmGenres(film.getId());
 
         assertThat(filmGenres)

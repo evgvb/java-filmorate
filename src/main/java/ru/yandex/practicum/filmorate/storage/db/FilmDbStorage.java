@@ -11,12 +11,12 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 import ru.yandex.practicum.filmorate.model.Film;
 import ru.yandex.practicum.filmorate.model.Mpa;
-import ru.yandex.practicum.filmorate.service.GenreService;
 import ru.yandex.practicum.filmorate.storage.FilmStorage;
 
 import java.sql.*;
 import java.sql.Date;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Repository
 @Qualifier("filmDbStorage")
@@ -24,12 +24,10 @@ import java.util.*;
 public class FilmDbStorage implements FilmStorage {
 
     private JdbcTemplate jdbcTemplate;
-    private GenreService genreService;
 
     @Autowired
-    public FilmDbStorage(JdbcTemplate jdbcTemplate, GenreService genreService) {
+    public FilmDbStorage(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.genreService = genreService;
     }
 
     private final RowMapper<Film> filmRowMapper = (rs, rowNum) -> {
@@ -52,13 +50,6 @@ public class FilmDbStorage implements FilmStorage {
         return film;
     };
 
-    private void loadLikes(Film film) {
-        String sqlLikes = "SELECT user_id FROM likes WHERE film_id = ?";
-        List<Long> likes = jdbcTemplate.query(sqlLikes, (rsLikes, rowNumLikes) ->
-                rsLikes.getLong("user_id"), film.getId());
-        film.setLikes(new HashSet<>(likes));
-    }
-
     @Override
     public Collection<Film> getAllFilms() {
         String sql = "SELECT f.*, mr.name as mpa_name FROM films f " +
@@ -67,10 +58,8 @@ public class FilmDbStorage implements FilmStorage {
 
         List<Film> films = jdbcTemplate.query(sql, filmRowMapper);
 
-        if (!films.isEmpty()) {
-            genreService.addGenresFilms(films);
-            films.forEach(this::loadLikes);
-        }
+        loadLikesForFilms(films);
+
         return films;
     }
 
@@ -84,8 +73,7 @@ public class FilmDbStorage implements FilmStorage {
             Film film = jdbcTemplate.queryForObject(sql, filmRowMapper, id);
 
             if (film != null) {
-                genreService.addGenresFilm(film);
-                loadLikes(film);
+                loadLikesForFilm(film);
             }
 
             return Optional.ofNullable(film);
@@ -112,10 +100,6 @@ public class FilmDbStorage implements FilmStorage {
 
         film.setId(keyHolder.getKey().longValue());
 
-        if (film.getGenres() != null && !film.getGenres().isEmpty()) {
-            genreService.setFilmGenres(film.getId(), new ArrayList<>(film.getGenres()));
-        }
-
         return film;
     }
 
@@ -131,11 +115,6 @@ public class FilmDbStorage implements FilmStorage {
                 film.getMpa() != null ? film.getMpa().getId() : null,
                 film.getId());
 
-        genreService.deleteFilmGenres(film.getId());
-        if (film.getGenres() != null && !film.getGenres().isEmpty()) {
-            genreService.setFilmGenres(film.getId(), new ArrayList<>(film.getGenres()));
-        }
-
         return film;
     }
 
@@ -146,7 +125,6 @@ public class FilmDbStorage implements FilmStorage {
             jdbcTemplate.update(sql, filmId, userId);
             log.debug("Добавлен лайк: фильм={}, пользователь={}", filmId, userId);
         } catch (Exception e) {
-            // Если лайк уже существует, это нормально
             log.debug("Лайк уже существует: фильм={}, пользователь={}", filmId, userId);
         }
     }
@@ -172,7 +150,6 @@ public class FilmDbStorage implements FilmStorage {
 
     @Override
     public void deleteFilm(Long id) {
-
         // Сначала удаляем зависимости
         String deleteLikesSql = "DELETE FROM likes WHERE film_id = ?";
         jdbcTemplate.update(deleteLikesSql, id);
@@ -199,16 +176,70 @@ public class FilmDbStorage implements FilmStorage {
                 "LEFT JOIN mpa_ratings mr ON f.mpa_id = mr.id " +
                 "LEFT JOIN likes l ON f.id = l.film_id " +
                 "GROUP BY f.id, mr.name " +
-                "ORDER BY likes_count DESC " +
+                "ORDER BY COUNT(l.user_id) DESC " +
                 "LIMIT ?";
 
         List<Film> films = jdbcTemplate.query(sql, filmRowMapper, count);
 
-        if (!films.isEmpty()) {
-            genreService.addGenresFilms(films);
-            films.forEach(this::loadLikes);
-        }
+        loadLikesForFilms(films);
 
         return films;
+    }
+
+    private void loadLikesForFilm(Film film) {
+        String sql = "SELECT user_id FROM likes WHERE film_id = ?";
+        List<Long> likes = jdbcTemplate.query(sql,
+                (rs, rowNum) -> rs.getLong("user_id"),
+                film.getId());
+        film.setLikes(new HashSet<>(likes));
+    }
+
+    private void loadLikesForFilms(List<Film> films) {
+        if (films == null || films.isEmpty()) {
+            return;
+        }
+
+        // Получаем ID фильмов
+        List<Long> filmIds = films.stream()
+                .map(Film::getId)
+                .collect(Collectors.toList());
+
+        // Загружаем все лайки для фильмов
+        Map<Long, Set<Long>> likesByFilmId = getLikesForFilms(filmIds);
+
+        // Устанавливаем лайки для каждого фильма
+        for (Film film : films) {
+            Set<Long> likes = likesByFilmId.get(film.getId());
+            if (likes != null) {
+                film.setLikes(likes);
+            } else {
+                film.setLikes(new HashSet<>());
+            }
+        }
+    }
+
+    private Map<Long, Set<Long>> getLikesForFilms(List<Long> filmIds) {
+        if (filmIds == null || filmIds.isEmpty()) {
+            return new HashMap<>();
+        }
+
+        String inClause = String.join(",", Collections.nCopies(filmIds.size(), "?"));
+        String sql = String.format(
+                "SELECT film_id, user_id FROM likes WHERE film_id IN (%s)",
+                inClause
+        );
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, filmIds.toArray());
+
+        Map<Long, Set<Long>> result = new HashMap<>();
+
+        for (Map<String, Object> row : rows) {
+            Long filmId = ((Number) row.get("film_id")).longValue();
+            Long userId = ((Number) row.get("user_id")).longValue();
+
+            result.computeIfAbsent(filmId, k -> new HashSet<>()).add(userId);
+        }
+
+        return result;
     }
 }

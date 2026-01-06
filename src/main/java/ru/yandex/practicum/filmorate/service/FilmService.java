@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import ru.yandex.practicum.filmorate.exception.ConditionsNotMetException;
 import ru.yandex.practicum.filmorate.exception.NotFoundException;
 import ru.yandex.practicum.filmorate.model.Film;
+import ru.yandex.practicum.filmorate.model.Genre;
 import ru.yandex.practicum.filmorate.model.User;
 import ru.yandex.practicum.filmorate.storage.FilmStorage;
 import ru.yandex.practicum.filmorate.storage.UserStorage;
@@ -43,7 +44,7 @@ public class FilmService {
                     " уже поставил лайк фильму с id=" + filmId);
         }
 
-        // Добавляем лайк через storage
+        // Добавляем лайк
         filmStorage.addLike(filmId, userId);
     }
 
@@ -58,7 +59,7 @@ public class FilmService {
                     " не ставил лайк фильму с id=" + filmId);
         }
 
-        // Удаляем лайк через storage
+        // Удаляем лайк
         filmStorage.removeLike(filmId, userId);
     }
 
@@ -67,15 +68,26 @@ public class FilmService {
             throw new ConditionsNotMetException("Параметр count должен быть положительным числом");
         }
 
-        return filmStorage.getPopularFilms(count);
+        List<Film> films = filmStorage.getPopularFilms(count);
+        genreService.addGenresFilms(films);
+        return films;
     }
 
     public Collection<Film> getAllFilms() {
-        return filmStorage.getAllFilms();
+        Collection<Film> films = filmStorage.getAllFilms();
+        if (films instanceof List) {
+            genreService.addGenresFilms((List<Film>) films);
+        } else {
+            List<Film> filmList = new ArrayList<>(films);
+            genreService.addGenresFilms(filmList);
+        }
+        return films;
     }
 
     public Film getFilmById(Long id) {
-        return getFilmOrThrow(id);
+        Film film = getFilmOrThrow(id);
+        genreService.addGenresFilm(film);
+        return film;
     }
 
     public Film createFilm(Film film) {
@@ -89,9 +101,18 @@ public class FilmService {
         // Проверяем существование жанра
         if (film.getGenres() != null && !film.getGenres().isEmpty()) {
             genreService.validateAllGenresExist(film.getGenres());
+
+            Set<Genre> uniqueGenres = new LinkedHashSet<>(film.getGenres());
+            film.setGenres(uniqueGenres);
         }
 
-        return filmStorage.createFilm(film);
+        Film createdFilm = filmStorage.createFilm(film);
+
+        if (createdFilm.getGenres() != null && !createdFilm.getGenres().isEmpty()) {
+            genreService.setFilmGenres(createdFilm.getId(), new ArrayList<>(createdFilm.getGenres()));
+        }
+
+        return createdFilm;
     }
 
     public Film updateFilm(Film film) {
@@ -100,20 +121,27 @@ public class FilmService {
 
         validateFilm(film);
 
-        // Проверяем существование рейтинга MPA
         if (film.getMpa() != null && film.getMpa().getId() != null) {
             mpaService.validateMpaExists(film.getMpa().getId());
         }
 
-        // Проверяем существование жанров
         if (film.getGenres() != null && !film.getGenres().isEmpty()) {
             genreService.validateAllGenresExist(film.getGenres());
+
+            Set<Genre> uniqueGenres = new LinkedHashSet<>(film.getGenres());
+            film.setGenres(uniqueGenres);
         }
 
-        // Сохраняем лайки из существующего фильма
         film.setLikes(existingFilm.getLikes());
 
-        return filmStorage.updateFilm(film);
+        Film updatedFilm = filmStorage.updateFilm(film);
+
+        genreService.deleteFilmGenres(updatedFilm.getId());
+        if (updatedFilm.getGenres() != null && !updatedFilm.getGenres().isEmpty()) {
+            genreService.setFilmGenres(updatedFilm.getId(), new ArrayList<>(updatedFilm.getGenres()));
+        }
+
+        return updatedFilm;
     }
 
     private void validateFilm(Film film) {
